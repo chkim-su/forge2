@@ -281,16 +281,60 @@ def validate_marketplace(result: ValidationResult):
 def run_validation(args) -> ValidationResult:
     """Run all validations based on arguments."""
     result = ValidationResult()
-    
+
     if args.path:
         path = Path(args.path)
-        if args.type == "skill" or (path.is_dir() and (path / "SKILL.md").exists()):
-            validate_skill(path, result)
-        elif args.type == "agent" or path.name.endswith(".md"):
-            validate_agent(path, result)
+
+        if args.type == "skill":
+            # Handle: SKILL.md file, skill directory, or skills/ parent directory
+            if path.is_file() and path.name == "SKILL.md":
+                validate_skill(path.parent, result)
+            elif path.is_dir() and (path / "SKILL.md").exists():
+                validate_skill(path, result)
+            elif path.is_dir():
+                # Parent directory containing multiple skills
+                for skill_dir in path.iterdir():
+                    if skill_dir.is_dir() and (skill_dir / "SKILL.md").exists():
+                        validate_skill(skill_dir, result)
+            else:
+                result.add_error("E001", f"Invalid skill path: {path}")
+
+        elif args.type == "agent":
+            if path.is_file() and path.name.endswith(".md"):
+                validate_agent(path, result)
+            elif path.is_dir():
+                for agent_file in path.glob("*.md"):
+                    validate_agent(agent_file, result)
+            else:
+                result.add_error("E010", f"Invalid agent path: {path}")
+
         elif args.type == "command":
-            validate_command(path, result)
-        elif args.type == "hook" or path.name.endswith(".json"):
+            if path.is_file() and path.name.endswith(".md"):
+                validate_command(path, result)
+            elif path.is_dir():
+                for cmd_file in path.glob("*.md"):
+                    validate_command(cmd_file, result)
+            else:
+                result.add_error("E020", f"Invalid command path: {path}")
+
+        elif args.type == "hook":
+            if path.is_file() and path.name.endswith(".json"):
+                validate_hooks(path, result)
+            elif path.is_dir():
+                hooks_file = path / "hooks.json"
+                if hooks_file.exists():
+                    validate_hooks(hooks_file, result)
+                else:
+                    result.add_error("E030", f"No hooks.json found in: {path}")
+            else:
+                result.add_error("E030", f"Invalid hook path: {path}")
+
+        # Auto-detect type if not specified
+        elif path.is_dir() and (path / "SKILL.md").exists():
+            validate_skill(path, result)
+        elif path.name.endswith(".md"):
+            validate_agent(path, result)
+        elif path.name.endswith(".json"):
             validate_hooks(path, result)
     else:
         # Validate all components
