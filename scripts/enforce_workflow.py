@@ -44,9 +44,19 @@ def main():
     required_agent = state.get("required_agent", "")
     current_phase = state.get("current_phase", "")
 
-    # Get tool info from environment (set by Claude Code hooks)
-    tool_name = os.environ.get("TOOL_NAME", "")
-    tool_input = os.environ.get("TOOL_INPUT", "{}")
+    # Read tool info from stdin (Claude Code passes JSON)
+    try:
+        stdin_data = sys.stdin.read()
+        if stdin_data.strip():
+            hook_input = json.loads(stdin_data)
+            tool_name = hook_input.get("tool_name", "")
+            tool_input = json.dumps(hook_input.get("tool_input", {}))
+        else:
+            tool_name = ""
+            tool_input = "{}"
+    except (json.JSONDecodeError, IOError):
+        tool_name = ""
+        tool_input = "{}"
 
     # If workflow is completed, allow all
     if phase_status == "completed":
