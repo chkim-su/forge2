@@ -64,8 +64,6 @@ def main():
                     sys.exit(0)  # ALLOW
 
                 # Also allow if the full plugin:agent format matches
-                if f"forge-editor:{required_agent}" in called_agent:
-                    sys.exit(0)  # ALLOW
                 if f"assist-plugin:{required_agent}" in called_agent:
                     sys.exit(0)  # ALLOW
             except json.JSONDecodeError:
@@ -79,7 +77,7 @@ def main():
         print(f"📍 Current Phase: {current_phase.upper()}", file=sys.stderr)
         print(f"   Phase Status: agent_required", file=sys.stderr)
         print(f"", file=sys.stderr)
-        print(f"▶ Execute: Task(\"forge-editor:{required_agent}\")", file=sys.stderr)
+        print(f"▶ Execute: Task(\"assist-plugin:{required_agent}\")", file=sys.stderr)
         print(f"", file=sys.stderr)
         print(f"─" * 50, file=sys.stderr)
         sys.exit(2)  # BLOCK

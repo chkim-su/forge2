@@ -263,7 +263,7 @@ def main():
 
 📍 Phase 1/{total_phases}: {first_phase.upper()}
 
-▶ Execute: Task("forge-editor:{first_agent}")
+▶ Execute: Task("assist-plugin:{first_agent}")
 ──────────────────────────────────────────────────────
 """
     }

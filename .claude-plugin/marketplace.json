@@ -1,7 +1,7 @@
 {
   "name": "assist-plugin-marketplace",
   "description": "Assist Plugin: Phase-aware workflow for creating Claude Code components (skills, agents, commands, hooks, MCP)",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "owner": {
     "name": "Chanho KIM"
   },
@@ -10,7 +10,7 @@
       "name": "assist-plugin",
       "description": "Smart scaffolding tool for Claude Code plugins with phase-aware context injection and schema validation gates",
       "source": "./",
-      "version": "0.4.0",
+      "version": "0.4.1",
       "author": {
         "name": "Chanho KIM"
       },
@@ -22,7 +22,8 @@
         "./skills/phase-verify"
       ],
       "commands": [
-        "./commands/assist.md"
+        "./commands/assist.md",
+        "./commands/verify.md"
       ],
       "agents": [
         "./agents/component-architect.md",

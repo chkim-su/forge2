@@ -1,65 +1,65 @@
 ---
-description: Comprehensive plugin verification using phase-based agent orchestration
-argument-hint: "[target] (default: current plugin)"
+description: Verify plugin components for schema compliance
+argument-hint: "[path] (default: current plugin)"
 allowed-tools: ["Read", "Bash", "Grep", "Glob", "Task"]
 ---
 
-# Verify Command
+# /verify Command
 
-Runs comprehensive verification workflow with dedicated agents per phase.
+Validates plugin components against schemas. Invokes verify agent → you fix issues.
 
-## Workflow Phases
+## Step 1: Initialize Verify Workflow
 
-| Phase | Agent | Purpose |
-|-------|-------|---------|
-| static_validation | (script) | Run schema_validator.py |
-| form_audit | form-selection-auditor | Check component forms |
-| content_quality | content-quality-analyzer | Check documentation |
-| semantic_analysis | diagnostic-orchestrator | Deep semantic analysis |
-| report | (manual) | Generate final report |
-
-## Execution Steps
-
-### Phase 1: Static Validation
-Run the schema validator to check all component files:
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/schema_validator.py"
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/workflow_state.py" init verify_workflow "verify plugin"
 ```
 
-### Phase 2: Form Audit
-Dispatch the form-selection-auditor agent to verify component forms:
+## Step 2: Invoke Verify Agent
+
 ```
-Task(subagent_type="forge-editor:form-selection-auditor")
+Task(
+  subagent_type="assist-plugin:phase-verify-agent",
+  prompt="Validate all components in the current plugin. Run schema_validator.py and report results.",
+  description="Validate components"
+)
 ```
 
-### Phase 3: Content Quality
-Dispatch the content-quality-analyzer agent:
+## Step 3: Act on Results
+
+Based on agent's report:
+
+### If PASS
 ```
-Task(subagent_type="forge-editor:content-quality-analyzer")
+✅ Verification Complete
+
+All components validated successfully.
 ```
 
-### Phase 4: Semantic Analysis
-Dispatch the diagnostic-orchestrator for deep analysis:
+### If FAIL
+Fix the reported errors:
+- Missing fields → Add to frontmatter
+- Invalid format → Correct the format
+- Missing registration → Add to marketplace.json
+
+Then re-run verification:
 ```
-Task(subagent_type="forge-editor:diagnostic-orchestrator")
+Task(
+  subagent_type="assist-plugin:phase-verify-agent",
+  prompt="Re-validate after fixes.",
+  description="Re-validate"
+)
 ```
 
-### Phase 5: Report
-Generate a comprehensive verification report summarizing all findings.
+## Step 4: Complete
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/workflow_state.py" complete-phase
+```
 
 ## Usage
 
 ```
-/verify              # Verify current plugin
-/verify skills/      # Verify skills only
+/verify                    # Verify entire plugin
+/verify skills/            # Verify skills only
+/verify agents/my-agent.md # Verify specific file
 ```
-
-## Arguments
-
-- `target`: Optional path to specific component or directory to verify
-
-## Notes
-
-- Each phase must complete successfully before proceeding to the next
-- Phase transitions are tracked in the daemon state
-- Agents report validation status which affects workflow progression

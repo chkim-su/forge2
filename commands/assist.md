@@ -1,146 +1,128 @@
 ---
 description: Create Claude Code components (skill, agent, command, hook, MCP) with phase-aware guidance
 argument-hint: "[component description or 'help']"
-allowed-tools: ["Read", "Write", "Bash", "Grep", "Glob", "Skill", "Task"]
+allowed-tools: ["Read", "Write", "Bash", "Grep", "Glob", "Skill", "Task", "AskUserQuestion"]
 ---
 
-# /assist Command
+# /assist Command - Orchestration Instructions
 
-Smart scaffolding for Claude Code plugin components with 4-phase workflow.
+Execute the phase-based workflow. Each phase: **Agent analyzes → You act on analysis**.
 
-## Usage
-
-```
-/assist "코드 리뷰 자동화 기능"
-/assist "SAP2000 MCP gateway"
-/assist help
-```
-
-## Workflow
+## Workflow Pattern
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│  Phase 1: INTENT     → Create vs Refactor/Verify 판단          │
-│  Phase 2: SEMANTIC   → 적절한 컴포넌트 타입 결정               │
-│  Phase 3: EXECUTE    → 스키마 기반 파일 생성                   │
-│  Phase 4: VERIFY     → EXIT GATE - 스키마 검증 (강제)          │
-└─────────────────────────────────────────────────────────────────┘
+For each phase:
+  1. Invoke agent → Agent returns analysis/info
+  2. You (main LLM) do actual work based on agent output
+  3. Complete phase → Move to next
 ```
 
-## Quick Start
-
-1. Run `/assist` with your requirement
-2. Answer 2-3 clarifying questions
-3. Review generated component
-4. Verify passes automatically (or fix issues)
-
-## Phase Details
-
-### Phase 1: Intent Classification
-
-Determines operation type:
-
-| Intent | Triggers | Action |
-|--------|----------|--------|
-| CREATE | "만들어", "create", "new", "추가" | New component scaffolding |
-| REFACTOR | "수정", "개선", "refactor", "fix" | Modify existing component |
-| VERIFY | "검증", "validate", "check" | Schema validation only |
-
-### Phase 2: Semantic Analysis
-
-Determines component type based on your description:
-
-| Component | When to Use | Key Indicators |
-|-----------|-------------|----------------|
-| **Skill** | Reusable knowledge/methodology | "방법", "가이드", "패턴" |
-| **Agent** | Multi-step autonomous tasks | "자동화", "분석", "에이전트" |
-| **Command** | User-initiated actions | "명령어", "/커맨드", "실행" |
-| **Hook** | Event-driven enforcement | "강제", "검증", "방지" |
-| **MCP** | External tool integration | "API", "서버", "MCP" |
-
-### Phase 3: Execute
-
-Loads appropriate schema and generates files:
-
-```
-Skill("assist-plugin:phase-execute")
-→ Load component-specific schema
-→ Generate SKILL.md / agent.md / command.md / hook.json
-→ Create directory structure
-```
-
-### Phase 4: Verify (EXIT GATE)
-
-**MANDATORY** - Cannot skip this phase.
+## Step 1: Read Workflow State
 
 ```bash
-python3 scripts/schema_validator.py --component-type {type} --path {path}
+cat /tmp/assist-workflow-state.json
 ```
 
-- Schema validation errors → BLOCK, show fix suggestions
-- Warnings → Allow with notice
-- Pass → Complete workflow
+Get: `workflow`, `current_phase`, `required_agent`, `context.user_request`
 
-## Monitor Panel (tmux)
+## Step 2: Execute Phase Loop
 
-When running in tmux, a side panel shows:
+### Phase: SEMANTIC
 
-```
-┌──────────────────────────┐
-│  📊 Assist Workflow      │
-│  ────────────────────    │
-│  Phase: semantic [2/4]   │
-│  ████████░░░░░░░ 50%     │
-│                          │
-│  ┌─ Intent    ✓          │
-│  ├─ Semantic  ◀ current  │
-│  ├─ Execute   ○          │
-│  └─ Verify    ○          │
-│                          │
-│  Decision:               │
-│  • Type: Hook + Skill    │
-│  • Reason: 자동 트리거   │
-│    + 지식 기반 분석      │
-└──────────────────────────┘
-```
-
-## Examples
-
-### Create a new skill
+**Agent task:** Classify component type
 
 ```
-/assist "FEM 해석 방법론 스킬"
+Task(
+  subagent_type="assist-plugin:phase-semantic-agent",
+  prompt="Classify component type for: {user_request}. Return: component_type, reasoning.",
+  description="Classify component"
+)
 ```
 
-→ Creates `skills/fem-analysis/SKILL.md` with proper frontmatter
-
-### Create an agent
-
-```
-/assist "코드 리뷰 자동화 에이전트"
+**You do:** Update workflow state with component type:
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/workflow_state.py" set-component {SKILL|AGENT|COMMAND|HOOK|MCP}
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/workflow_state.py" complete-phase
 ```
 
-→ Creates `agents/code-reviewer.md` with tools and skills
+---
 
-### Create a hook
+### Phase: EXECUTE
+
+**Agent task:** Plan file structure and content
 
 ```
-/assist "커밋 전 린트 강제 훅"
+Task(
+  subagent_type="assist-plugin:phase-execute-agent",
+  prompt="Plan component structure for {component_type}. Return: file paths, frontmatter fields, content outline.",
+  description="Plan component"
+)
 ```
 
-→ Creates `hooks/pre-commit-lint.json` with PreToolUse config
+**You do:** Actually create the files based on agent's plan:
+- Write SKILL.md / agent.md / command.md / hook config
+- Use proper frontmatter from schema
+- Register in marketplace.json
 
-## Troubleshooting
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/workflow_state.py" add-file "path/to/file"
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/workflow_state.py" complete-phase
+```
 
-| Issue | Solution |
-|-------|----------|
-| "Phase stuck" | Check `scripts/workflow_state.py status` |
-| "Verify failed" | Read error message, fix schema issues |
-| "Wrong component type" | Re-run with explicit type: `/assist skill: ...` |
+---
 
-## References
+### Phase: VERIFY
 
-- Phase 1: `Skill("assist-plugin:phase-intent")`
-- Phase 2: `Skill("assist-plugin:phase-semantic")`
-- Phase 3: `Skill("assist-plugin:phase-execute")`
-- Phase 4: `Skill("assist-plugin:phase-verify")`
+**Agent task:** Validate generated components
+
+```
+Task(
+  subagent_type="assist-plugin:phase-verify-agent",
+  prompt="Validate files in workflow state. Run schema_validator.py. Return: pass/fail, errors, warnings.",
+  description="Validate components"
+)
+```
+
+**You do:**
+- If PASS: Report success, complete workflow
+- If FAIL: Fix errors based on agent feedback, re-verify
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/workflow_state.py" complete-phase
+```
+
+## Step 3: Report Completion
+
+```
+✅ Workflow Complete
+
+Created: {component_type}
+Files:
+• path/to/file1
+• path/to/file2
+
+Validation: PASSED
+```
+
+## Workflow Definitions
+
+| Workflow | Phases |
+|----------|--------|
+| skill_creation | semantic → execute → verify |
+| verify_workflow | verify |
+| refactor_workflow | semantic → execute → verify |
+
+## If State Missing
+
+Ask user what they want to create, then initialize manually:
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/workflow_state.py" init skill_creation "user request"
+```
+
+## Key Rules
+
+1. **Agent = analysis/info provider** (classification, validation, planning)
+2. **You = executor** (file writes, edits, registration)
+3. Always invoke agent FIRST at each phase
+4. Use agent's output to guide your actions
+5. Complete phase before moving to next
