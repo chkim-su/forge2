@@ -181,8 +181,9 @@ Options:
 After generation:
 
 ```bash
-python3 scripts/workflow_state.py set-phase execute completed
-python3 scripts/workflow_state.py set-generated-files '["path/to/file1", "path/to/file2"]'
+python3 scripts/workflow_state.py add-file path/to/file1
+python3 scripts/workflow_state.py add-file path/to/file2
+python3 scripts/workflow_state.py update execute completed
 ```
 
 ## Output Format

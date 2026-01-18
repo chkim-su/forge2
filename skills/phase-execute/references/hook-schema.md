@@ -193,8 +193,8 @@ Warning: Hook script should handle errors gracefully
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/workflow_state.py\" init",
-            "timeout": 3
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/my-router.py\"",
+            "timeout": 5
           }
         ]
       }
@@ -204,8 +204,8 @@ Warning: Hook script should handle errors gracefully
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/workflow_state.py\" finalize",
-            "timeout": 5
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/exit_gate.py\"",
+            "timeout": 15
           }
         ]
       }

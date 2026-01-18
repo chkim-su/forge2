@@ -81,7 +81,7 @@ def classify_intent(user_input: str) -> str:
 After classification, update workflow state:
 
 ```bash
-python3 scripts/workflow_state.py set-phase intent completed
+python3 scripts/workflow_state.py update intent completed
 python3 scripts/workflow_state.py set-intent {CREATE|REFACTOR|VERIFY}
 ```
 

@@ -395,12 +395,12 @@ def main():
     parser = argparse.ArgumentParser(description="Schema validator for assist-plugin")
     parser.add_argument("--path", help="Specific file/directory to validate")
     parser.add_argument("--type", choices=["skill", "agent", "command", "hook"], help="Component type")
-    parser.add_argument("--pre-edit", action="store_true", help="Pre-edit validation")
-    parser.add_argument("--post-edit", action="store_true", help="Post-edit validation")
+    parser.add_argument("--pre-edit", action="store_true", help="Pre-edit validation (reserved, not implemented)")
+    parser.add_argument("--post-edit", action="store_true", help="Post-edit validation (reserved, not implemented)")
     parser.add_argument("--strict", action="store_true", help="Treat warnings as errors")
     parser.add_argument("--quiet", action="store_true", help="Minimal output")
-    parser.add_argument("--fix", action="store_true", help="Auto-fix issues")
-    parser.add_argument("--dry-run", action="store_true", help="Show fixes without applying")
+    parser.add_argument("--fix", action="store_true", help="Auto-fix issues (reserved, not implemented)")
+    parser.add_argument("--dry-run", action="store_true", help="Show fixes without applying (reserved, not implemented)")
     
     args = parser.parse_args()
     

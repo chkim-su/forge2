@@ -159,9 +159,8 @@ A2: 없음 → Single component
 After classification:
 
 ```bash
-python3 scripts/workflow_state.py set-phase semantic completed
-python3 scripts/workflow_state.py set-component-type {SKILL|AGENT|COMMAND|HOOK|MCP}
-python3 scripts/workflow_state.py set-decision '{"type": "...", "reason": "..."}'
+python3 scripts/workflow_state.py update semantic completed
+python3 scripts/workflow_state.py set-component {SKILL|AGENT|COMMAND|HOOK|MCP}
 ```
 
 ## Output Format

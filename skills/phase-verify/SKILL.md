@@ -140,12 +140,10 @@ Result:
 
 ```bash
 # On success
-python3 scripts/workflow_state.py set-phase verify completed
-python3 scripts/workflow_state.py set-workflow-status success
+python3 scripts/workflow_state.py update verify completed
 
 # On failure
-python3 scripts/workflow_state.py set-phase verify failed
-python3 scripts/workflow_state.py set-workflow-status blocked
+python3 scripts/workflow_state.py update verify failed
 ```
 
 ## Integration with Hooks

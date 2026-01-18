@@ -55,6 +55,9 @@ claude plugin add /path/to/forge-editor
 | Agent | Description |
 |-------|-------------|
 | `component-architect` | Autonomous component designer |
+| `phase-semantic-agent` | Component type determination |
+| `phase-execute-agent` | Schema-based file generation |
+| `phase-verify-agent` | EXIT GATE validation |
 
 ## Directory Structure
 
@@ -74,8 +77,10 @@ forge-editor/
 ├── hooks/
 │   └── hooks.json
 ├── scripts/
+│   ├── semantic-intent-router-hook.py
+│   ├── enforce_workflow.py
+│   ├── task-post-router.py
 │   ├── workflow_state.py
-│   ├── context_injector.py
 │   ├── schema_validator.py
 │   └── exit_gate.py
 └── README.md
@@ -96,9 +101,10 @@ Workflow phases are enforced via hooks:
 
 | Hook | Event | Purpose |
 |------|-------|---------|
-| `workflow_state.py` | UserPromptSubmit | Initialize state |
-| `context_injector.py` | UserPromptSubmit | Load phase skills |
-| `schema_validator.py` | Pre/PostToolUse | Validate changes |
+| `semantic-intent-router-hook.py` | UserPromptSubmit | Intent analysis, workflow init |
+| `enforce_workflow.py` | PreToolUse | Block tools until agent runs |
+| `task-post-router.py` | PostToolUse (Task) | Detect agent completion |
+| `schema_validator.py` | PostToolUse (Write/Edit) | Validate changes |
 | `exit_gate.py` | Stop | **EXIT GATE** enforcement |
 
 ## Development
@@ -106,14 +112,24 @@ Workflow phases are enforced via hooks:
 ### Testing Workflow State
 
 ```bash
-# Initialize
-python3 scripts/workflow_state.py init
+# Initialize workflow
+python3 scripts/workflow_state.py init skill_creation
 
 # Check status
 python3 scripts/workflow_state.py status
 
-# Update phase
+# Update phase status
 python3 scripts/workflow_state.py update semantic completed
+
+# Set intent/component type
+python3 scripts/workflow_state.py set-intent CREATE
+python3 scripts/workflow_state.py set-component SKILL
+
+# Track generated files
+python3 scripts/workflow_state.py add-file skills/my-skill/SKILL.md
+
+# Reset workflow
+python3 scripts/workflow_state.py reset
 ```
 
 ### Running Validation

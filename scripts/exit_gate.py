@@ -32,20 +32,26 @@ def get_state() -> dict:
 def check_workflow_progress(state: dict) -> list:
     """Check if workflow has made progress worth validating."""
     errors = []
-    
+
     phases = state.get("phases", {})
     context = state.get("context", {})
-    
+    workflow_type = state.get("workflow_type", "skill_creation")
+
+    # Get the final phase for this workflow
+    phase_list = list(phases.keys())
+    final_phase = phase_list[-1] if phase_list else "verify"
+
     # Check if any work was done
-    execute_status = phases.get("execute", {}).get("status", "pending")
     generated_files = context.get("generated_files", [])
-    
-    if execute_status == "completed" or generated_files:
-        # Work was done, verify phase is required
-        verify_status = phases.get("verify", {}).get("status", "pending")
-        if verify_status != "completed":
-            errors.append("⚠️  Execute phase completed but Verify phase not run")
-    
+    has_execute = "execute" in phases
+    execute_completed = phases.get("execute", {}).get("status") == "completed"
+
+    if (has_execute and execute_completed) or generated_files:
+        # Work was done, final phase (verify) is required
+        final_status = phases.get(final_phase, {}).get("status", "pending")
+        if final_status != "completed":
+            errors.append(f"⚠️  Work completed but {final_phase} phase not run")
+
     return errors
 
 
@@ -71,16 +77,24 @@ def run_schema_validation() -> tuple:
     return result.returncode == 0, errors
 
 
-def update_verify_phase(success: bool):
-    """Update verify phase status in workflow state."""
+def update_final_phase(success: bool):
+    """Update final phase status in workflow state."""
     state = get_state()
     if not state:
         return
-    
-    state["phases"]["verify"]["status"] = "completed" if success else "failed"
-    state["phases"]["verify"]["result"] = "PASSED" if success else "FAILED"
-    
-    STATE_FILE.write_text(json.dumps(state, indent=2))
+
+    phases = state.get("phases", {})
+    if not phases:
+        return
+
+    # Get the final phase for this workflow
+    phase_list = list(phases.keys())
+    final_phase = phase_list[-1] if phase_list else None
+
+    if final_phase and final_phase in phases:
+        phases[final_phase]["status"] = "completed" if success else "failed"
+        phases[final_phase]["result"] = "PASSED" if success else "FAILED"
+        STATE_FILE.write_text(json.dumps(state, indent=2))
 
 
 def main():
@@ -120,7 +134,7 @@ def main():
         print("  3. Confirm all validations pass", file=sys.stderr)
         print("═" * 50, file=sys.stderr)
         
-        update_verify_phase(False)
+        update_final_phase(False)
         sys.exit(2)  # BLOCK
     
     # All good
@@ -137,7 +151,7 @@ def main():
     print("\n🎉 Workflow completed successfully!")
     print("═" * 50)
     
-    update_verify_phase(True)
+    update_final_phase(True)
     sys.exit(0)
 
 

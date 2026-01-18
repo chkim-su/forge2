@@ -39,20 +39,18 @@ WORKFLOWS = {
         },
     },
     "verify_workflow": {
-        "phases": ["static_validation", "form_audit", "content_quality", "report"],
+        # Simplified: single verify phase using existing agent
+        "phases": ["verify"],
         "agents": {
-            "static_validation": "static-validator-agent",
-            "form_audit": "form-auditor-agent",
-            "content_quality": "content-quality-agent",
-            "report": "report-generator-agent"
+            "verify": "phase-verify-agent"
         },
     },
     "refactor_workflow": {
-        "phases": ["analysis", "plan", "execute", "verify"],
+        # Simplified: reuse existing agents
+        "phases": ["semantic", "execute", "verify"],
         "agents": {
-            "analysis": "refactor-analyzer-agent",
-            "plan": "refactor-planner-agent",
-            "execute": "refactor-executor-agent",
+            "semantic": "phase-semantic-agent",
+            "execute": "phase-execute-agent",
             "verify": "phase-verify-agent"
         },
     },

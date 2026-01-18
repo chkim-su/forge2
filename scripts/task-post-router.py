@@ -21,7 +21,6 @@ from pathlib import Path
 
 PLUGIN_ROOT = Path(os.environ.get("CLAUDE_PLUGIN_ROOT", Path(__file__).parent.parent))
 STATE_FILE = Path("/tmp/assist-workflow-state.json")
-SESSION_STATE_DIR = Path(os.path.expanduser("~/.claude/forge-state"))
 
 
 def get_workflow_state() -> dict:
@@ -85,7 +84,6 @@ def main():
     # Get tool input and output from environment
     tool_input = os.environ.get("TOOL_INPUT", "{}")
     tool_output = os.environ.get("TOOL_OUTPUT", "")
-    session_id = os.environ.get("SESSION_ID", "default")
 
     # Load current workflow state
     state = get_workflow_state()
