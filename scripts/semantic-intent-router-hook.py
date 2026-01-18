@@ -164,11 +164,25 @@ def get_phase_instruction(phase: str, phase_agents: dict) -> str:
 
 
 def main():
-    user_prompt = os.environ.get("USER_PROMPT", "")
+    # Read hook input from stdin (Claude Code passes JSON via stdin)
+    try:
+        stdin_data = sys.stdin.read()
+        if stdin_data.strip():
+            hook_input = json.loads(stdin_data)
+            user_prompt = hook_input.get("prompt", "")
+        else:
+            user_prompt = ""
+    except (json.JSONDecodeError, IOError):
+        user_prompt = ""
+
     session_id = os.environ.get("SESSION_ID", "default")
 
     # Skip if empty prompt
     if not user_prompt.strip():
+        sys.exit(0)
+
+    # GUARD: Only process /assist commands - exit silently for other prompts
+    if not user_prompt.strip().startswith("/assist"):
         sys.exit(0)
 
     # Analyze intent

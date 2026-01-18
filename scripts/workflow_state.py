@@ -1,17 +1,27 @@
 #!/usr/bin/env python3
 """
-Workflow state management for assist-plugin.
+Unified workflow state management for assist-plugin.
 
 Tracks the 4-phase workflow: intent → semantic → execute → verify
+Includes protocol definitions merged from daemon-gate.py.
 
-Commands:
+State Commands:
   init                     - Initialize workflow state
   status                   - Show current state
   update <phase> <status>  - Update phase status
   require <phase>          - Block if prerequisite phases not complete
   set-intent <intent>      - Set intent classification
   set-component <type>     - Set component type
+  add-file <filepath>      - Track a generated file
   reset                    - Reset to initial state
+
+Protocol Commands (merged from daemon-gate.py):
+  check-protocol <workflow>        - Check if protocol exists
+  get-phases <workflow>            - Get phases for workflow
+  validate-phase <workflow> <phase>- Validate phase requirements
+  push-workflow <workflow> [phase] - Push workflow to state
+  mark-validation <name> <status>  - Mark validation result
+  list-protocols                   - List all protocols
 """
 
 import json
@@ -31,6 +41,41 @@ PHASE_PREREQUISITES = {
     "semantic": ["intent"],
     "execute": ["intent", "semantic"],
     "verify": ["intent", "semantic", "execute"]
+}
+
+# Protocol definitions (merged from daemon-gate.py)
+PROTOCOLS = {
+    "skill_creation": {
+        "phases": ["init", "intent", "semantic", "execute", "verify", "complete"],
+        "required_validations": ["schema_validation"],
+        "agent_required_validations": [],
+        "phase_requirements": {
+            "semantic": ["intent"],
+            "execute": ["semantic"],
+            "verify": ["execute"],
+            "complete": ["verify"],
+        },
+    },
+    "analyze_only": {
+        "phases": ["init", "analysis", "complete"],
+        "required_validations": [],
+        "agent_required_validations": [],
+        "phase_requirements": {
+            "complete": ["analysis"],
+        },
+    },
+    "verify_workflow": {
+        "phases": ["init", "static_validation", "form_audit", "content_quality", "semantic_analysis", "report", "complete"],
+        "required_validations": ["validate_all"],
+        "agent_required_validations": ["form_selection_audit", "content_quality"],
+        "phase_requirements": {
+            "form_audit": ["static_validation"],
+            "content_quality": ["form_audit"],
+            "semantic_analysis": ["content_quality"],
+            "report": ["semantic_analysis"],
+            "complete": ["report"],
+        },
+    },
 }
 
 
@@ -224,6 +269,78 @@ def reset_state():
     print("✅ Workflow reset")
 
 
+# Protocol-related functions (merged from daemon-gate.py)
+def check_protocol(workflow: str) -> bool:
+    """Check if protocol exists."""
+    return workflow in PROTOCOLS
+
+
+def get_protocol_phases(workflow: str) -> list:
+    """Get phases for a workflow."""
+    if workflow not in PROTOCOLS:
+        return []
+    return PROTOCOLS[workflow]["phases"]
+
+
+def get_phase_requirements(workflow: str, phase: str) -> list:
+    """Get required phases before entering a phase."""
+    if workflow not in PROTOCOLS:
+        return []
+    return PROTOCOLS[workflow].get("phase_requirements", {}).get(phase, [])
+
+
+def validate_phase_entry(workflow: str, phase: str) -> tuple:
+    """
+    Validate if a phase can be entered.
+    Returns (allowed: bool, missing_requirements: list)
+    """
+    if workflow not in PROTOCOLS:
+        return False, [f"Unknown workflow: {workflow}"]
+
+    protocol = PROTOCOLS[workflow]
+    if phase not in protocol["phases"]:
+        return False, [f"Unknown phase: {phase} for workflow {workflow}"]
+
+    required_phases = protocol.get("phase_requirements", {}).get(phase, [])
+    if not required_phases:
+        return True, []
+
+    state = get_state()
+    # Check completed phases in state
+    phases = state.get("phases", {})
+    completed = [p for p, data in phases.items() if data.get("status") == "completed"]
+
+    missing = [p for p in required_phases if p not in completed]
+    return len(missing) == 0, missing
+
+
+def push_workflow(workflow: str, initial_phase: str = "init"):
+    """Push a workflow to the state."""
+    state = get_state()
+    state["current_workflow"] = workflow
+    state["current_phase"] = initial_phase
+    save_state(state)
+    return True
+
+
+def mark_validation(validation: str, status: str):
+    """Mark a validation as executed/passed/failed."""
+    state = get_state()
+    if "validations" not in state:
+        state["validations"] = {}
+    state["validations"][validation] = status
+    save_state(state)
+
+
+def list_protocols():
+    """List all available protocols."""
+    for name, proto in PROTOCOLS.items():
+        print(f"\n{name}:")
+        print(f"  Phases: {' → '.join(proto['phases'])}")
+        print(f"  Required validations: {proto['required_validations']}")
+        print(f"  Agent validations: {proto['agent_required_validations']}")
+
+
 def main():
     if len(sys.argv) < 2:
         show_status()
@@ -263,9 +380,51 @@ def main():
         add_generated_file(sys.argv[2])
     elif cmd == "reset":
         reset_state()
+    # Protocol-related commands (merged from daemon-gate.py)
+    elif cmd == "check-protocol":
+        if len(sys.argv) < 3:
+            print("Usage: workflow_state.py check-protocol <workflow>", file=sys.stderr)
+            sys.exit(1)
+        exists = check_protocol(sys.argv[2])
+        print("true" if exists else "false")
+        sys.exit(0 if exists else 1)
+    elif cmd == "get-phases":
+        if len(sys.argv) < 3:
+            print("Usage: workflow_state.py get-phases <workflow>", file=sys.stderr)
+            sys.exit(1)
+        import json as json_mod
+        phases = get_protocol_phases(sys.argv[2])
+        print(json_mod.dumps(phases))
+    elif cmd == "validate-phase":
+        if len(sys.argv) < 4:
+            print("Usage: workflow_state.py validate-phase <workflow> <phase>", file=sys.stderr)
+            sys.exit(1)
+        allowed, missing = validate_phase_entry(sys.argv[2], sys.argv[3])
+        if allowed:
+            print("✅ Phase entry allowed")
+            sys.exit(0)
+        else:
+            print(f"❌ Missing requirements: {missing}", file=sys.stderr)
+            sys.exit(2)
+    elif cmd == "push-workflow":
+        if len(sys.argv) < 3:
+            print("Usage: workflow_state.py push-workflow <workflow> [initial_phase]", file=sys.stderr)
+            sys.exit(1)
+        initial = sys.argv[3] if len(sys.argv) > 3 else "init"
+        push_workflow(sys.argv[2], initial)
+        print(f"✅ Workflow {sys.argv[2]} pushed")
+    elif cmd == "mark-validation":
+        if len(sys.argv) < 4:
+            print("Usage: workflow_state.py mark-validation <validation> <status>", file=sys.stderr)
+            sys.exit(1)
+        mark_validation(sys.argv[2], sys.argv[3])
+        print(f"✅ Validation {sys.argv[2]} marked as {sys.argv[3]}")
+    elif cmd == "list-protocols":
+        list_protocols()
     else:
         print(f"Unknown command: {cmd}", file=sys.stderr)
         print("Commands: init, status, update, require, set-intent, set-component, add-file, reset")
+        print("Protocol commands: check-protocol, get-phases, validate-phase, push-workflow, mark-validation, list-protocols")
         sys.exit(1)
 
 
