@@ -25,7 +25,10 @@
         "./commands/assist.md"
       ],
       "agents": [
-        "./agents/component-architect.md"
+        "./agents/component-architect.md",
+        "./agents/phase-semantic-agent.md",
+        "./agents/phase-execute-agent.md",
+        "./agents/phase-verify-agent.md"
       ],
       "hooks": [
         "./hooks/hooks.json"

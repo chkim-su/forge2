@@ -2,11 +2,11 @@
 """
 Unified workflow state management for assist-plugin.
 
-Tracks the 4-phase workflow: intent → semantic → execute → verify
-Includes protocol definitions merged from daemon-gate.py.
+Hook-based workflow architecture with agent-first enforcement.
+Router analyzes intent at entry → each phase requires agent execution before free work.
 
 State Commands:
-  init                     - Initialize workflow state
+  init <workflow> [phase]  - Initialize workflow state with first phase
   status                   - Show current state
   update <phase> <status>  - Update phase status
   require <phase>          - Block if prerequisite phases not complete
@@ -14,6 +14,8 @@ State Commands:
   set-component <type>     - Set component type
   add-file <filepath>      - Track a generated file
   reset                    - Reset to initial state
+  complete-phase           - Mark current phase complete, transition to next
+  agent-completed          - Mark agent as completed, transition to working status
 
 Protocol Commands (merged from daemon-gate.py):
   check-protocol <workflow>        - Check if protocol exists
@@ -32,10 +34,10 @@ from datetime import datetime
 
 STATE_FILE = Path("/tmp/assist-workflow-state.json")
 
-# Phase order for dependency checking
+# Phase order for legacy dependency checking (kept for backward compatibility)
 PHASE_ORDER = ["intent", "semantic", "execute", "verify"]
 
-# Phase prerequisites
+# Legacy phase prerequisites (kept for backward compatibility)
 PHASE_PREREQUISITES = {
     "intent": [],
     "semantic": ["intent"],
@@ -43,17 +45,62 @@ PHASE_PREREQUISITES = {
     "verify": ["intent", "semantic", "execute"]
 }
 
-# Protocol definitions (merged from daemon-gate.py)
+# =============================================================================
+# NEW ARCHITECTURE: Workflow definitions with agent-first enforcement
+# Router analyzes intent (not a phase) → each phase requires agent before free work
+# =============================================================================
+WORKFLOWS = {
+    "skill_creation": {
+        "phases": ["semantic", "execute", "verify"],
+        "agents": {
+            "semantic": "phase-semantic-agent",
+            "execute": "phase-execute-agent",
+            "verify": "phase-verify-agent"
+        },
+        "phase_requirements": {
+            "execute": ["semantic"],
+            "verify": ["execute"],
+        },
+    },
+    "verify_workflow": {
+        "phases": ["static_validation", "form_audit", "content_quality", "report"],
+        "agents": {
+            "static_validation": "static-validator-agent",
+            "form_audit": "form-auditor-agent",
+            "content_quality": "content-quality-agent",
+            "report": "report-generator-agent"
+        },
+        "phase_requirements": {
+            "form_audit": ["static_validation"],
+            "content_quality": ["form_audit"],
+            "report": ["content_quality"],
+        },
+    },
+    "refactor_workflow": {
+        "phases": ["analysis", "plan", "execute", "verify"],
+        "agents": {
+            "analysis": "refactor-analyzer-agent",
+            "plan": "refactor-planner-agent",
+            "execute": "refactor-executor-agent",
+            "verify": "phase-verify-agent"
+        },
+        "phase_requirements": {
+            "plan": ["analysis"],
+            "execute": ["plan"],
+            "verify": ["execute"],
+        },
+    },
+}
+
+# Legacy PROTOCOLS (kept for backward compatibility with existing scripts)
 PROTOCOLS = {
     "skill_creation": {
-        "phases": ["init", "intent", "semantic", "execute", "verify", "complete"],
+        "phases": ["semantic", "execute", "verify"],
         "required_validations": ["schema_validation"],
         "agent_required_validations": [],
         "phase_requirements": {
-            "semantic": ["intent"],
             "execute": ["semantic"],
             "verify": ["execute"],
-            "complete": ["verify"],
         },
     },
     "analyze_only": {
@@ -65,15 +112,13 @@ PROTOCOLS = {
         },
     },
     "verify_workflow": {
-        "phases": ["init", "static_validation", "form_audit", "content_quality", "semantic_analysis", "report", "complete"],
+        "phases": ["static_validation", "form_audit", "content_quality", "report"],
         "required_validations": ["validate_all"],
         "agent_required_validations": ["form_selection_audit", "content_quality"],
         "phase_requirements": {
             "form_audit": ["static_validation"],
             "content_quality": ["form_audit"],
-            "semantic_analysis": ["content_quality"],
-            "report": ["semantic_analysis"],
-            "complete": ["report"],
+            "report": ["content_quality"],
         },
     },
 }
@@ -89,25 +134,52 @@ def get_state() -> dict:
     return create_initial_state()
 
 
-def create_initial_state() -> dict:
-    """Create fresh workflow state."""
-    return {
+def create_initial_state(workflow: str = None, first_phase: str = None) -> dict:
+    """Create fresh workflow state with new architecture fields."""
+    state = {
         "workflow_id": datetime.now().strftime("%Y%m%d_%H%M%S"),
         "created_at": datetime.now().isoformat(),
-        "current_phase": "intent",
-        "phases": {
-            "intent": {"status": "pending", "result": None},
-            "semantic": {"status": "pending", "result": None},
-            "execute": {"status": "pending", "result": None, "files": []},
-            "verify": {"status": "pending", "result": None}
-        },
+        # New architecture fields
+        "intent": None,                    # CREATE, VERIFY, REFACTOR (set by router)
+        "workflow": workflow,              # skill_creation, verify_workflow, refactor_workflow
+        "current_phase": first_phase,      # Current phase in workflow
+        "phase_status": "agent_required",  # agent_required | working
+        "required_agent": None,            # Agent that must execute before free work
+        # Phase tracking
+        "phases": {},
+        # Context
         "context": {
-            "intent_type": None,      # CREATE, REFACTOR, VERIFY
-            "component_type": None,    # SKILL, AGENT, COMMAND, HOOK, MCP
+            "user_request": None,          # Original user request
+            "component_type": None,        # SKILL, AGENT, COMMAND, HOOK, MCP
             "component_name": None,
             "generated_files": []
         }
     }
+
+    # Initialize phases based on workflow
+    if workflow and workflow in WORKFLOWS:
+        workflow_def = WORKFLOWS[workflow]
+        for phase in workflow_def["phases"]:
+            state["phases"][phase] = {
+                "status": "pending",
+                "agent_completed": False,
+                "result": None
+            }
+        # Set first phase and required agent
+        if first_phase and first_phase in workflow_def["agents"]:
+            state["required_agent"] = workflow_def["agents"][first_phase]
+            state["phases"][first_phase]["status"] = "in_progress"
+    else:
+        # Legacy fallback
+        state["current_phase"] = "intent"
+        state["phases"] = {
+            "intent": {"status": "pending", "result": None},
+            "semantic": {"status": "pending", "result": None},
+            "execute": {"status": "pending", "result": None, "files": []},
+            "verify": {"status": "pending", "result": None}
+        }
+
+    return state
 
 
 def save_state(state: dict):
@@ -116,49 +188,106 @@ def save_state(state: dict):
     STATE_FILE.write_text(json.dumps(state, indent=2))
 
 
-def init_state():
-    """Initialize or reset workflow state."""
-    state = create_initial_state()
+def init_state(workflow: str = None, first_phase: str = None, intent: str = None, user_request: str = None):
+    """Initialize workflow state with new architecture."""
+    # Determine first phase from workflow if not specified
+    if workflow and workflow in WORKFLOWS and not first_phase:
+        first_phase = WORKFLOWS[workflow]["phases"][0]
+
+    state = create_initial_state(workflow, first_phase)
+
+    if intent:
+        state["intent"] = intent.upper()
+    if user_request:
+        state["context"]["user_request"] = user_request
+
     save_state(state)
-    print(f"✅ Workflow initialized: {state['workflow_id']}")
+
+    if workflow:
+        agent = state.get("required_agent", "none")
+        print(f"✅ Workflow initialized: {workflow}")
+        print(f"   Phase: {first_phase}")
+        print(f"   Status: agent_required")
+        print(f"   Required agent: {agent}")
+    else:
+        print(f"✅ Workflow initialized: {state['workflow_id']}")
 
 
 def show_status():
     """Display current workflow state."""
     state = get_state()
-    
+
     print(f"\n📊 Assist Workflow Status")
-    print(f"─" * 40)
-    print(f"ID: {state.get('workflow_id', 'unknown')}")
-    print(f"Current Phase: {state['current_phase']}")
-    print()
-    
-    # Phase status with visual indicators
-    icons = {
-        "pending": "○",
-        "in_progress": "◐",
-        "completed": "✓",
-        "failed": "✗"
-    }
-    
-    for phase in PHASE_ORDER:
-        phase_data = state["phases"].get(phase, {})
-        status = phase_data.get("status", "pending")
-        result = phase_data.get("result", "")
-        icon = icons.get(status, "?")
-        
-        current = " ◀" if phase == state["current_phase"] else ""
-        result_str = f" → {result}" if result else ""
-        
-        print(f"  {icon} {phase.capitalize()}{result_str}{current}")
-    
+    print(f"─" * 50)
+
+    # New architecture display
+    workflow = state.get("workflow")
+    if workflow:
+        intent = state.get("intent", "unknown")
+        phase_status = state.get("phase_status", "unknown")
+        required_agent = state.get("required_agent", "none")
+        current_phase = state.get("current_phase", "unknown")
+
+        print(f"Intent: {intent}")
+        print(f"Workflow: {workflow}")
+        print(f"Current Phase: {current_phase}")
+        print(f"Phase Status: {phase_status}")
+        if phase_status == "agent_required":
+            print(f"Required Agent: {required_agent}")
+        print()
+
+        # Phase status with visual indicators
+        icons = {
+            "pending": "○",
+            "in_progress": "◐",
+            "completed": "✓",
+            "failed": "✗"
+        }
+
+        if workflow in WORKFLOWS:
+            phases = WORKFLOWS[workflow]["phases"]
+            for phase in phases:
+                phase_data = state["phases"].get(phase, {})
+                status = phase_data.get("status", "pending")
+                agent_completed = phase_data.get("agent_completed", False)
+                icon = icons.get(status, "?")
+
+                current = " ◀" if phase == current_phase else ""
+                agent_str = " [agent✓]" if agent_completed else ""
+
+                print(f"  {icon} {phase.upper()}{agent_str}{current}")
+    else:
+        # Legacy display
+        print(f"ID: {state.get('workflow_id', 'unknown')}")
+        print(f"Current Phase: {state.get('current_phase', 'unknown')}")
+        print()
+
+        icons = {
+            "pending": "○",
+            "in_progress": "◐",
+            "completed": "✓",
+            "failed": "✗"
+        }
+
+        for phase in PHASE_ORDER:
+            phase_data = state["phases"].get(phase, {})
+            status = phase_data.get("status", "pending")
+            result = phase_data.get("result", "")
+            icon = icons.get(status, "?")
+
+            current = " ◀" if phase == state.get("current_phase") else ""
+            result_str = f" → {result}" if result else ""
+
+            print(f"  {icon} {phase.capitalize()}{result_str}{current}")
+
     # Context info
     ctx = state.get("context", {})
-    if ctx.get("intent_type") or ctx.get("component_type"):
+    if ctx.get("user_request") or ctx.get("component_type"):
         print()
         print(f"Context:")
-        if ctx.get("intent_type"):
-            print(f"  Intent: {ctx['intent_type']}")
+        if ctx.get("user_request"):
+            req = ctx["user_request"][:50] + "..." if len(ctx.get("user_request", "")) > 50 else ctx.get("user_request")
+            print(f"  Request: {req}")
         if ctx.get("component_type"):
             print(f"  Component: {ctx['component_type']}")
         if ctx.get("generated_files"):
@@ -196,27 +325,115 @@ def update_phase(phase: str, status: str, result: str = None):
 def require_phase(phase: str):
     """
     Block if prerequisite phases not complete.
-    
+
     Exit codes:
       0 - All prerequisites met, allow
       2 - Prerequisites not met, BLOCK (stderr message shown to Claude)
     """
     state = get_state()
     prerequisites = PHASE_PREREQUISITES.get(phase, [])
-    
+
     missing = []
     for prereq in prerequisites:
         prereq_status = state["phases"].get(prereq, {}).get("status", "pending")
         if prereq_status != "completed":
             missing.append(prereq)
-    
+
     if missing:
         msg = f"❌ BLOCKED: Phase '{phase}' requires completion of: {', '.join(missing)}"
         print(msg, file=sys.stderr)
         sys.exit(2)  # BLOCK
-    
+
     print(f"✅ Prerequisites met for '{phase}'")
     sys.exit(0)  # ALLOW
+
+
+# =============================================================================
+# NEW ARCHITECTURE: Phase transition functions
+# =============================================================================
+
+def agent_completed():
+    """
+    Mark the required agent as completed for current phase.
+    Transitions phase_status from 'agent_required' to 'working'.
+    Called by PostToolUse hook when the required agent finishes.
+    """
+    state = get_state()
+    workflow = state.get("workflow")
+    current_phase = state.get("current_phase")
+
+    if not workflow:
+        print("No active workflow", file=sys.stderr)
+        sys.exit(1)
+
+    # Mark agent as completed for this phase
+    if current_phase in state.get("phases", {}):
+        state["phases"][current_phase]["agent_completed"] = True
+
+    # Transition to working status
+    state["phase_status"] = "working"
+    save_state(state)
+
+    print(f"✅ Agent completed for phase '{current_phase}'")
+    print(f"   Phase status → working (free work allowed)")
+
+
+def complete_phase():
+    """
+    Mark current phase as complete and transition to next phase.
+    The next phase starts with phase_status='agent_required'.
+    """
+    state = get_state()
+    workflow = state.get("workflow")
+    current_phase = state.get("current_phase")
+
+    if not workflow or workflow not in WORKFLOWS:
+        print(f"No active workflow or unknown workflow: {workflow}", file=sys.stderr)
+        sys.exit(1)
+
+    workflow_def = WORKFLOWS[workflow]
+    phases = workflow_def["phases"]
+
+    # Mark current phase as completed
+    if current_phase in state.get("phases", {}):
+        state["phases"][current_phase]["status"] = "completed"
+
+    # Find next phase
+    try:
+        current_idx = phases.index(current_phase)
+    except ValueError:
+        print(f"Current phase '{current_phase}' not in workflow phases", file=sys.stderr)
+        sys.exit(1)
+
+    if current_idx >= len(phases) - 1:
+        # Workflow complete
+        state["phase_status"] = "completed"
+        state["current_phase"] = None
+        save_state(state)
+        print(f"═" * 50)
+        print(f"✅ Workflow '{workflow}' COMPLETED")
+        print(f"═" * 50)
+        return
+
+    # Transition to next phase
+    next_phase = phases[current_idx + 1]
+    next_agent = workflow_def["agents"].get(next_phase)
+
+    state["current_phase"] = next_phase
+    state["phase_status"] = "agent_required"
+    state["required_agent"] = next_agent
+    state["phases"][next_phase]["status"] = "in_progress"
+
+    save_state(state)
+
+    print(f"─" * 50)
+    print(f"✅ Phase '{current_phase}' completed")
+    print(f"─" * 50)
+    print()
+    print(f"📍 Phase {current_idx + 2}/{len(phases)}: {next_phase.upper()}")
+    print()
+    print(f"▶ Execute: Task(\"forge-editor:{next_agent}\")")
+    print(f"─" * 50)
 
 
 def set_intent(intent_type: str):
@@ -345,11 +562,20 @@ def main():
     if len(sys.argv) < 2:
         show_status()
         return
-    
+
     cmd = sys.argv[1].lower()
-    
+
     if cmd == "init":
-        init_state()
+        # New architecture: init <workflow> [--intent=X] [--request="..."]
+        workflow = sys.argv[2] if len(sys.argv) > 2 else None
+        intent = None
+        user_request = None
+        for arg in sys.argv[3:]:
+            if arg.startswith("--intent="):
+                intent = arg.split("=", 1)[1]
+            elif arg.startswith("--request="):
+                user_request = arg.split("=", 1)[1]
+        init_state(workflow=workflow, intent=intent, user_request=user_request)
     elif cmd == "status":
         show_status()
     elif cmd == "update":
@@ -358,6 +584,11 @@ def main():
             sys.exit(1)
         result = sys.argv[4] if len(sys.argv) > 4 else None
         update_phase(sys.argv[2], sys.argv[3], result)
+    # New architecture commands
+    elif cmd == "complete-phase":
+        complete_phase()
+    elif cmd == "agent-completed":
+        agent_completed()
     elif cmd == "require":
         if len(sys.argv) < 3:
             print("Usage: workflow_state.py require <phase>", file=sys.stderr)

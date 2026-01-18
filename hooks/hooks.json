@@ -1,5 +1,5 @@
 {
-  "$comment": "Assist-plugin workflow enforcement hooks",
+  "$comment": "Assist-plugin hook-based workflow architecture",
   "hooks": {
     "UserPromptSubmit": [
       {
@@ -8,52 +8,16 @@
             "type": "command",
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/semantic-intent-router-hook.py\"",
             "timeout": 5
-          },
-          {
-            "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/workflow_state.py\" init",
-            "timeout": 3
-          },
-          {
-            "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/context_injector.py\"",
-            "timeout": 5
           }
         ]
       }
     ],
     "PreToolUse": [
       {
-        "matcher": "Write|Edit",
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/workflow_state.py\" require semantic",
-            "timeout": 3
-          },
-          {
-            "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/schema_validator.py\" --pre-edit --quiet",
-            "timeout": 10
-          }
-        ]
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/workflow_state.py\" require execute",
-            "timeout": 3
-          }
-        ]
-      },
-      {
-        "matcher": "Task",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/workflow_state.py\" require intent",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/enforce_workflow.py\"",
             "timeout": 3
           }
         ]
@@ -61,27 +25,22 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "Write|Edit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/schema_validator.py\" --post-edit",
-            "timeout": 10
-          },
-          {
-            "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/workflow_state.py\" update execute in_progress",
-            "timeout": 3
-          }
-        ]
-      },
-      {
         "matcher": "Task",
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/workflow_state.py\" update execute completed",
-            "timeout": 3
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/task-post-router.py\"",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/schema_validator.py\" --post-edit --quiet",
+            "timeout": 10
           }
         ]
       }
@@ -101,10 +60,12 @@
   "$schema_notes": {
     "schema_version": "Claude Code 1.0.40+",
     "timeout_unit": "seconds",
-    "workflow_phases": ["intent", "semantic", "execute", "verify"],
+    "architecture": "hook-based workflow with agent-first enforcement",
+    "workflow_flow": "Router → phase_status=agent_required → agent executes → phase_status=working → free work → complete-phase → next phase",
     "enforcement_hooks": {
-      "workflow_state.py": "Tracks and enforces phase progression",
-      "context_injector.py": "Loads appropriate skills based on current phase",
+      "semantic-intent-router-hook.py": "Analyzes intent at entry, selects workflow, initializes state",
+      "enforce_workflow.py": "PreToolUse: blocks all tools until required agent executes",
+      "task-post-router.py": "PostToolUse: detects agent completion, transitions to working status",
       "schema_validator.py": "Validates component structure and frontmatter",
       "exit_gate.py": "EXIT GATE - mandatory verification before completion"
     }
