@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# Claude Code user-specific
+.claude/settings.local.json
+.claude/local/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
