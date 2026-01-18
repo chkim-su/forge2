@@ -1,0 +1,171 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://claude.ai/plugin/marketplace.schema.json",
+  "title": "Claude Code Plugin Marketplace Schema",
+  "description": "Schema for .claude-plugin/marketplace.json",
+  "type": "object",
+  "required": ["name", "owner", "plugins"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z0-9-]+$",
+      "description": "Marketplace name in kebab-case"
+    },
+    "description": {
+      "type": "string",
+      "description": "Brief description of the plugin collection"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Semantic version"
+    },
+    "owner": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Author or organization name"
+        },
+        "email": {
+          "type": "string",
+          "format": "email"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        }
+      }
+    },
+    "homepage": {
+      "type": "string",
+      "format": "uri",
+      "description": "Plugin homepage URL"
+    },
+    "plugins": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/definitions/plugin"
+      }
+    }
+  },
+  "definitions": {
+    "plugin": {
+      "type": "object",
+      "required": ["name", "description", "source"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]+$",
+          "description": "Plugin name in kebab-case"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 10,
+          "description": "What this plugin does"
+        },
+        "source": {
+          "oneOf": [
+            {
+              "type": "string",
+              "const": "./"
+            },
+            {
+              "type": "object",
+              "required": ["source", "repo"],
+              "properties": {
+                "source": {
+                  "type": "string",
+                  "const": "github"
+                },
+                "repo": {
+                  "type": "string",
+                  "pattern": "^[a-zA-Z0-9-]+/[a-zA-Z0-9-]+$"
+                }
+              }
+            }
+          ]
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$"
+        },
+        "author": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string" },
+            "email": { "type": "string", "format": "email" }
+          }
+        },
+        "category": {
+          "type": "string",
+          "enum": ["productivity", "development", "analysis", "automation", "other"]
+        },
+        "skills": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^\\./(skills/[a-z0-9-]+)$",
+            "description": "Path to skill directory (no .md extension)"
+          }
+        },
+        "commands": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^\\./(commands/[a-z0-9-]+\\.md)$",
+            "description": "Path to command file (must end with .md)"
+          }
+        },
+        "agents": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^\\./(agents/[a-z0-9-]+\\.md)$",
+            "description": "Path to agent file (must end with .md)"
+          }
+        },
+        "hooks": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^\\./(hooks/[a-z0-9-]+\\.json)$",
+            "description": "Path to hooks JSON file"
+          }
+        },
+        "mcpServers": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/mcpServer"
+          }
+        }
+      }
+    },
+    "mcpServer": {
+      "type": "object",
+      "required": ["command"],
+      "properties": {
+        "command": {
+          "type": "string",
+          "description": "Command to start the MCP server"
+        },
+        "args": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Arguments for the command"
+        },
+        "env": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "Environment variables"
+        },
+        "cwd": {
+          "type": "string",
+          "description": "Working directory"
+        }
+      }
+    }
+  }
+}
